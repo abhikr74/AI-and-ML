@@ -1,0 +1,129 @@
+---
+title: "ML_AI"
+author: "Abhishek Kumar"
+date: "February 14, 2021"
+output: html_document
+---
+
+```{r}
+tot = 1000 # total number of observations
+
+x = runif(tot, -1, 2) # generated some input variables
+
+# Generating target variable according to the process
+y = -5 + 4*x^2 + 2*x^4 - 1.5*x^5 + rnorm(tot, sd = 1.5)
+
+#plotting and adding the true function
+plot(x, y, col = adjustcolor('black', 0.5), pch = 19)
+y_line = -5 + 4*x^2 + 2*x^4 - 1.5*x^5
+ord = order(x)
+lines(x[ord], y_line[ord], col = "deepskyblue2", lwd = 3)
+
+```
+
+
+```{r}
+dat0 = data.frame(x,y)
+head(dat0)
+```
+
+```{r}
+
+qvec = 1:8 # Number of values of Q
+
+# Splitting data into training , validation, and test sets.
+N = tot*0.5
+L = tot*0.25
+M = tot*0.25
+
+B = 100 # Number of replicates
+
+```
+
+
+```{r}
+# Store results
+
+acc_train = acc_val = matrix(NA, B, length(qvec))
+err_test = best_q = rep(NA, B)
+
+# Creating replicates
+
+for(b in 1:B){
+  
+  train = sample(1:tot, N)
+  val = sample((1:tot)[-train], L)
+  test = sample((1:tot)[-c(train, val)]) # setdiff(1:tot, c(train, val))
+  
+  dat = dat0
+  
+  for(q in 1:length(qvec)){
+  # growing the data adding columns for x^q at each iteration.
+    if(q>1) dat = cbind(dat, dat$x^qvec[q])
+    colnames(dat)[-(1:2)] = paste0('x',2:qvec[q]) # naming the dataframe columns for predicting
+  
+    fit = lm(y ~ ., data = dat, subset = train) # training the model
+   
+    y_train = predict(fit) # Prediction on training data
+    y_val = predict(fit, newdata = dat[val,]) # prediction on the validation data
+  
+    acc_train[b,q] = sum( (y_train - dat$y[train])^2 ) * (1/N) # error on training data
+    acc_val[b, q] = sum( (y_val - dat$y[val])^2 ) * (1/L) # error on validation data
+  } # for-q
+  
+  # Finding Q which minimizes the estimated validation error
+  best_q[b] = which.min(acc_val[b,])
+  
+  
+  # Traing model with optimum Q
+  fit = lm(y ~ . , data = dat[, 1:(best_q[b] + 1) ], subset = train)
+  
+  y_test = predict(fit, newdata = dat[test, ]) # Prediction on test data
+  err_test[b] = sum( (y_test - dat$y[test])^2 ) *(1/L) # test error
+  
+} # for-b
+
+
+```
+
+
+```{r}
+# Plotting estimated traing error and validation error as a function of Q, that is of model complexity.
+
+r = range(c(acc_train, acc_val, err_test))
+
+matplot(x = qvec, y = t(acc_train), type = 'l', lty = 1, col = adjustcolor('black', 0.05), xlab = 'Q', ylab = 'Error', ylim = r, log = 'y') # Setting error on log scale
+matplot(x = qvec, y = t(acc_val), type = 'l', lty = 1, col =  adjustcolor('darkorange', 0.05), add =T, log ='y')
+lines(qvec, colMeans(acc_train), col = 'black', lwd = 2)
+lines(qvec, colMeans(acc_val), col = 'darkorange', lwd = 2)
+legend('topleft', legend = c('Training Error', 'Valdation Error'), fill = c('black', 'darkorange'), bty = 'n')
+
+
+```
+
+
+__*I can now inspect which order Q has been selected most number of times and and corresponding estimated test errors.*__
+
+```{r best_q}
+
+# selected Value of Q which appeared most number of times
+table(best_q)
+
+```
+
+
+```{r}
+
+#plotted estimated test error for each Q
+plot(jitter(best_q), err_test, pch = 19, col = adjustcolor('black', 0.05), xlab ="Selected-Q", ylab = 'Test error')
+
+# Adding mean and standard deviations
+err_mean = tapply(err_test, best_q, mean) # Average error for each Q values
+err_sd = tapply(err_test, best_q,sd) # Standard Deviations for each Q values
+qval = sort(unique(best_q))
+segments(qval - 0.2, err_mean, qval + 0.2, err_mean, col = "magenta", lwd = 2)
+segments(qval, err_mean + err_sd, qval, err_mean - err_sd,
+col = adjustcolor("magenta", 0.3) , lwd = 2)
+
+```
+
