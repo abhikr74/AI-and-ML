@@ -1,0 +1,164 @@
+---
+title: "Logistic regression with L1 regularization"
+author: "Abhishek Kumar"
+date: "February 14, 2021"
+output: html_document
+---
+
+```{r}
+setwd('I:\\My Drive\\spring_semester\\ml_and_ai\\labs\\lab2')
+```
+
+
+```{r}
+load('data_hand_gest.RData') # load data?```
+
+```{r}
+str(x)
+range(x)
+```
+
+
+
+```{r standardizing}
+x = scale(x)
+library(Rtsne)
+rtsne = Rtsne(x, perplexity = 30)
+cols = c("black", "darkorange2")[y+1]
+plot(rtsne$Y, pch = 19, col = adjustcolor(cols, 0.4))
+```
+
+
+```{r}
+library(e1071) # for 'ClassAgreem?nt'
+
+# function to calculate the classification accuracy
+class_acc = function(y, yhat){
+  
+  # Inputs:
+  #   y - actual labels
+  #   yhat - predicted labels
+  
+  tab = table(y, yhat)
+  classAgreement(tab)$diag
+}
+
+
+# Using following function to compute the ?oss given a set of true labels and predicted probabilities:
+
+loss <- function(y, prob) {
+-sum( y*log(prob) + (1-y)*log(1-prob) )/length(y)
+}
+
+```
+
+
+
+```{r glmnet}
+# popular R package glmnet allows to fit models with forms of ????1 and ????2 regularization (and even both) for a suite of regression models, including logistic regression.
+install.packages('glmnet')
+library(glmnet) # loading package
+```
+
+
+__*Defining training, validation and test sets sizes*__
+
+```{r}
+
+# setting training, valida?ion, and test data set.
+
+tot = nrow(x) # Number of observation in the dataset
+N = floor(tot*0.6) # set size for traing data
+L = floor(tot*0.3) # set size for the validation data
+M = floor(tot*0.1) # set size for the test data
+test = sample(1:N, M) # test d?ta
+
+# Number of replicates to account for the uncertainity due to the random sampling.
+
+B =100
+
+table(y) # checking if classes are balance or not
+
+```
+
+```{r}
+
+tau = 0.5
+S = 100
+lambda = exp(seq(-3.5, -5.5, length = S-1)) # set sequence for lambda with log?pace
+lambda = c(lambda, 0)                       # This corresponds to plain logistic regression
+
+# Store reuslts
+
+acc_train = acc_val = loss_train = loss_val = matrix(NA, B, S)
+lambda_best = rep(NA, B)
+
+for(b in 1:B){
+  
+  # sample training and validation?data
+  train = sample( (1:tot)[-test], N)
+  val = setdiff(1:tot, c(train, test))
+  
+  # train the model
+  fit = glmnet(x[train, ], y[train], family = 'binomial', alpha = 1, lambda = lambda)
+  
+  # Obatining predicted classes for the training and the valida?ion data
+  
+  p_train = predict(fit, newx = x[train, ], type = 'response')
+  y_train = apply(p_train, 2, function(v) ifelse(v > tau, 1, 0))
+  
+  # 
+  p_val = predict(fit, newx = x[val, ], type = 'response')
+  y_val = apply(p_val, 2, function(v) ifelse(v > ?au, 1, 0))
+  
+  # Estimating classification accuracy
+  
+  acc_train[b, ] = sapply(1:S, function(s) class_acc(y[train], y_train[,s]))
+  acc_val[b, ] = sapply(1:S, function(s) class_acc(y[val], y_val[,s])) 
+  
+  # computing loss
+  
+  loss_train[b,] = sapply(?1:S, function(s) loss(y[train], p_train[,s]))
+  loss_val[b,] = sapply( 1:S, function(s) loss(y[val], p_val[,s]))
+  
+  # Selecting lambda which maximizes classification accuracy on validation data
+  
+  best = which.max(acc_val[b,])
+  lambda_best[b] = lambda?best]
+  
+  
+}
+
+```
+
+```{r}
+matplot(lambda, t(acc_train), type = 'l', lty = 1, xlab = 'lambda', ylab = 'Accuracy',
+        col = adjustcolor('black', 0.05), log = 'y')
+matplot(lambda, t(acc_val), type = 'l', lty = 1, adjustcolor('blue', 0.05),
+        add =?TRUE, log = 'y')
+lines(lambda, colMeans(acc_train), col = "black", lwd = 2)
+lines(lambda, colMeans(acc_val), col = "blue", lwd = 2)
+legend("topright", legend = c("Training accuracy", "Validation accuracy"),
+       fill = c("black", "blue"), bty = "n")
+# ge? optimal lambda
+lambda_star = lambda[ which.max( colMeans(acc_val) ) ]
+lambda_star
+abline(v = lambda_star, col = "magenta")
+```
+
+
+
+```{r}
+matplot(x = lambda, t(loss_train), type = "l", lty = 1, ylab = "Loss",
+        xlab = "Lambda",col = adjustcolor("blac?", 0.05))
+matplot(x = lambda, t(loss_val), type = "l", lty = 1, 
+        col = adjustcolor("deepskyblue2", 0.05), add = TRUE, log = "y")
+lines(lambda, colMeans(loss_train), col = "black", lwd = 2)
+lines(lambda, colMeans(loss_val), col = "deepskyblue3", lwd?= 2)
+legend("bottomright", legend = c("Training loss", "Validation loss"),
+fill = c("black", "deepskyblue2"), bty = "n")
+# plot optimal lambdas
+abline(v = lambda_star, col = "magenta")
+abline(v = lambda[ which.min( colMeans(loss_val) ) ], col = "red")
+
+```?
